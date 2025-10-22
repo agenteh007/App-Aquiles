@@ -1,0 +1,350 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
+// --- DATA SIMULADA (simula la respuesta del Backend/Typesense/PostGIS) ---
+
+const MOCK_PROPERTIES = [
+  { id: 1, type: 'Departamento', operation: 'Alquiler', price: 850, currency: 'USD', rooms: 3, surface: 95, address: 'Recoleta, CABA', ownerType: 'Inmobiliaria', isVerified: true, isFeatured: true, imageUrl: 'https://placehold.co/400x300/F0F3FF/2B6CB0?text=VISTA+BALCÓN' },
+  { id: 2, type: 'Casa', operation: 'Venta', price: 210000, currency: 'USD', rooms: 5, surface: 250, address: 'San Isidro, GBA', ownerType: 'Propietario', isVerified: false, isFeatured: false, imageUrl: 'https://placehold.co/400x300/EBF8FF/2C5282?text=FRENTE+DE+CASA' },
+  { id: 3, type: 'Oficina', operation: 'Alquiler', price: 1200, currency: 'USD', rooms: 2, surface: 70, address: 'Microcentro, CABA', ownerType: 'Inmobiliaria', isVerified: true, isFeatured: false, imageUrl: 'https://placehold.co/400x300/F0FDF4/22543D?text=OFICINA+MODERNA' },
+  { id: 4, type: 'Departamento', operation: 'Venta', price: 155000, currency: 'USD', rooms: 4, surface: 120, address: 'Palermo, CABA', ownerType: 'Propietario', isVerified: true, isFeatured: false, imageUrl: 'https://placehold.co/400x300/FEFBEB/92400E?text=DEPARTAMENTO+LUZ' },
+];
+
+const PROPERTY_TYPES = ['Departamento', 'Casa', 'Oficina', 'Lote', 'Local'];
+const OPERATIONS = ['Venta', 'Alquiler', 'Temporario'];
+const ROOMS_OPTIONS = ['1+', '2+', '3+', '4+'];
+
+// Iconos usando Lucide React (simulado con inline SVG)
+const SearchIcon = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+);
+const MapPinIcon = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 1 1 16 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+);
+const UserCheckIcon = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
+);
+const BedIcon = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4v7h12v-7"></path><path d="M2 11h20"></path><path d="M6 15h1a4 4 0 0 0 4-4v-5"></path><path d="M4 19h1a4 4 0 0 0 4-4v-5"></path><path d="M12 4v4"></path></svg>
+);
+const FilterIcon = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+);
+const StarIcon = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+);
+
+// Componente para la Tarjeta de Propiedad
+const PropertyCard = ({ property }) => {
+  return (
+    <div className={`bg-white rounded-xl shadow-lg hover:shadow-xl transition duration-300 overflow-hidden ${property.isFeatured ? 'border-4 border-yellow-500' : 'border border-gray-100'}`}>
+      {property.isFeatured && (
+        <div className="absolute top-0 right-0 bg-yellow-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg z-10">
+          DESTACADO
+        </div>
+      )}
+      <div className="relative h-48 bg-gray-100">
+        <img
+          src={property.imageUrl}
+          alt={property.title}
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute bottom-0 left-0 bg-blue-600 text-white text-sm font-semibold px-3 py-1 rounded-tr-lg">
+          {property.operation}
+        </div>
+      </div>
+      <div className="p-5">
+        <h3 className="text-2xl font-bold text-gray-800 mb-1">
+          {property.currency} {property.price.toLocaleString('es-AR')}
+        </h3>
+        <p className="text-lg font-semibold text-gray-700 mb-2">{property.type} en {property.address}</p>
+        <div className="flex items-center text-sm text-gray-500 mb-4 space-x-4">
+          <div className="flex items-center">
+            <BedIcon className="w-4 h-4 mr-1 text-blue-500" />
+            <span>{property.rooms} Amb.</span>
+          </div>
+          <div className="flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 mr-1 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 10a7 7 0 0 1 7-7h14v14a7 7 0 0 1-7 7h-7a7 7 0 0 1-7-7z"></path></svg>
+            <span>{property.surface} m²</span>
+          </div>
+        </div>
+        <div className="flex justify-between items-center mt-3">
+          <span className="text-xs text-gray-600 font-medium">Publicado por: {property.ownerType}</span>
+          {property.isVerified && (
+            <div className="flex items-center text-green-600 bg-green-50 rounded-full px-2 py-0.5 text-xs font-semibold">
+              <UserCheckIcon className="w-3 h-3 mr-1" />
+              AFIP Verificado
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Componente principal de la aplicación
+const App = () => {
+  const [filters, setFilters] = useState({
+    operation: 'Alquiler',
+    propertyType: '',
+    rooms: '',
+    minPrice: '',
+    maxPrice: '',
+    searchText: '',
+    onlyVerified: false,
+  });
+  const [properties, setProperties] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // Simulación de Fetching de Datos (a la API/Typesense)
+  const fetchProperties = useCallback(() => {
+    setIsLoading(true);
+    // Lógica para construir la consulta a Typesense o PostGIS (PostGIS para la parte geo)
+    console.log('Fetching properties with filters:', filters);
+
+    // Simular latencia de red y filtrado
+    setTimeout(() => {
+      let filtered = MOCK_PROPERTIES.filter(p => {
+        if (filters.operation && p.operation !== filters.operation) return false;
+        if (filters.propertyType && p.type !== filters.propertyType) return false;
+        if (filters.onlyVerified && !p.isVerified) return false;
+        // Simple search logic
+        if (filters.searchText && !p.address.toLowerCase().includes(filters.searchText.toLowerCase())) return false;
+        return true;
+      });
+
+      // Simular ordenamiento: Destacados primero (parte de la lógica de monetización)
+      filtered.sort((a, b) => (b.isFeatured - a.isFeatured));
+
+      setProperties(filtered);
+      setIsLoading(false);
+    }, 800);
+  }, [filters]);
+
+  useEffect(() => {
+    fetchProperties();
+  }, [fetchProperties]);
+
+  const handleFilterChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFilters(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    fetchProperties();
+  };
+
+  const activeFiltersCount = useMemo(() => {
+    return Object.values(filters).filter(val => val && val !== 'Alquiler' && val !== false).length;
+  }, [filters]);
+
+  // --- Renderizado de Filtros ---
+
+  const renderFilterSelect = (name, label, options) => (
+    <select
+      name={name}
+      value={filters[name]}
+      onChange={handleFilterChange}
+      className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 px-3 text-gray-700"
+    >
+      <option value="">{label}</option>
+      {options.map(opt => (
+        <option key={opt} value={opt}>{opt}</option>
+      ))}
+    </select>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans">
+      {/* Header (Simulado) */}
+      <header className="bg-white shadow-md sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+          <h1 className="text-3xl font-extrabold text-blue-600">ZonaInmo</h1>
+          <nav className="hidden md:flex space-x-6">
+            <a href="#" className="text-gray-600 hover:text-blue-600 font-medium transition">Publicar</a>
+            <a href="#" className="text-gray-600 hover:text-blue-600 font-medium transition">Planes Premium</a>
+            <a href="#" className="text-gray-600 hover:text-blue-600 font-medium transition">Mi Perfil</a>
+            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition">Login</button>
+          </nav>
+          <button className="md:hidden text-gray-600">☰</button>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <h2 className="text-4xl font-extrabold text-gray-900 mb-6">Encuentra tu próximo hogar o inversión</h2>
+
+        {/* --- BARRA DE BÚSQUEDA PRINCIPAL --- */}
+        <div className="bg-white p-6 rounded-2xl shadow-xl mb-8 border border-gray-100">
+          <form onSubmit={handleSearch} className="space-y-4">
+            {/* Fila de Operación y Búsqueda de Texto */}
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Selector de Operación */}
+              <div className="md:w-1/4">
+                {renderFilterSelect('operation', 'Tipo de Operación', OPERATIONS)}
+              </div>
+              
+              {/* Búsqueda por Texto/Ubicación */}
+              <div className="md:w-3/4 relative">
+                <input
+                  type="text"
+                  name="searchText"
+                  value={filters.searchText}
+                  onChange={handleFilterChange}
+                  placeholder="Buscar por Ubicación, Barrio, o Calle (ej: Palermo, CABA)"
+                  className="w-full pl-10 pr-4 py-2 rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                />
+                <MapPinIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+              </div>
+            </div>
+
+            {/* Filtros Básicos y Botón de Búsqueda */}
+            <div className="flex flex-col md:flex-row gap-4 items-end">
+                {/* Tipo de Propiedad */}
+                <div className="flex-1 w-full">
+                    {renderFilterSelect('propertyType', 'Tipo de Propiedad', PROPERTY_TYPES)}
+                </div>
+                {/* Ambientes */}
+                <div className="flex-1 w-full">
+                    {renderFilterSelect('rooms', 'Ambientes', ROOMS_OPTIONS)}
+                </div>
+                {/* Precio Mínimo */}
+                <div className="flex-1 w-full">
+                    <input
+                      type="number"
+                      name="minPrice"
+                      value={filters.minPrice}
+                      onChange={handleFilterChange}
+                      placeholder="Precio Mín."
+                      className="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 px-3 text-gray-700"
+                    />
+                </div>
+                {/* Botón Buscar */}
+                <div className="w-full md:w-auto">
+                    <button
+                        type="submit"
+                        className="w-full md:w-auto flex items-center justify-center bg-blue-600 text-white font-bold px-6 py-2.5 rounded-lg hover:bg-blue-700 transition duration-200 shadow-lg"
+                    >
+                        <SearchIcon className="w-5 h-5 mr-2" />
+                        Buscar
+                    </button>
+                </div>
+            </div>
+
+            {/* Toggle Filtros Avanzados */}
+            <button
+                type="button"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className="flex items-center text-sm font-semibold text-blue-600 hover:text-blue-700 transition"
+            >
+                <FilterIcon className="w-4 h-4 mr-1" />
+                {showAdvancedFilters ? 'Ocultar Filtros Avanzados' : `Mostrar Filtros Avanzados (${activeFiltersCount})`}
+            </button>
+
+            {/* Filtros Avanzados */}
+            {showAdvancedFilters && (
+                <div className="pt-4 border-t border-gray-100 mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* Precio Máximo */}
+                    <input
+                      type="number"
+                      name="maxPrice"
+                      value={filters.maxPrice}
+                      onChange={handleFilterChange}
+                      placeholder="Precio Máx."
+                      className="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 px-3 text-gray-700"
+                    />
+                    {/* Filtro por Reputación (Simulado) */}
+                    {renderFilterSelect('minReputation', 'Reputación Mínima (⭐)', ['3+', '4+'])}
+
+                    {/* Checkbox AFIP Verificado */}
+                    <div className="flex items-center col-span-1 md:col-span-2">
+                        <input
+                          id="onlyVerified"
+                          name="onlyVerified"
+                          type="checkbox"
+                          checked={filters.onlyVerified}
+                          onChange={handleFilterChange}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="onlyVerified" className="ml-2 block text-sm font-medium text-gray-700 flex items-center">
+                          Solo Verificados por AFIP <UserCheckIcon className="w-4 h-4 ml-1 text-green-600" />
+                        </label>
+                    </div>
+                </div>
+            )}
+          </form>
+        </div>
+
+        {/* --- RESULTADOS Y MAPA --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* Columna de Resultados */}
+          <div className="lg:col-span-2">
+            <div className="flex justify-between items-center mb-4">
+                <p className="text-gray-600 text-lg font-medium">
+                    Mostrando **{properties.length}** {properties.length === 1 ? 'propiedad' : 'propiedades'} encontradas.
+                </p>
+                {/* Simulación de Ordenamiento */}
+                <select className="text-sm border rounded-lg py-1 px-2">
+                    <option>Ordenar por Relevancia</option>
+                    <option>Precio: Menor a Mayor</option>
+                    <option>Precio: Mayor a Menor</option>
+                    <option>Fecha de Publicación</option>
+                </select>
+            </div>
+            
+            {isLoading ? (
+              <div className="text-center py-10 text-gray-500">
+                <SearchIcon className="w-8 h-8 mx-auto animate-spin text-blue-500" />
+                <p className="mt-2">Buscando propiedades...</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {properties.map(property => (
+                  <PropertyCard key={property.id} property={property} />
+                ))}
+                
+                {properties.length === 0 && (
+                  <div className="bg-white p-10 rounded-xl shadow-lg text-center text-gray-500">
+                    <h3 className="text-xl font-semibold mb-2">Sin Resultados</h3>
+                    <p>Ajusta tus filtros o prueba otra ubicación.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* Columna de Mapa Interactivo (Sticky en Desktop) */}
+          <div className="lg:col-span-1">
+            <div className="sticky top-24 bg-white rounded-xl shadow-xl p-4 h-[500px] lg:h-[70vh] border border-gray-100">
+              <h3 className="text-lg font-bold text-gray-800 mb-2 flex items-center">
+                <MapPinIcon className="w-5 h-5 mr-2 text-red-500" />
+                Mapa de Propiedades
+              </h3>
+              <div className="w-full h-[calc(100%-35px)] bg-gray-200 flex items-center justify-center text-gray-500 text-center rounded-lg">
+                <p>
+                  Placeholder para Google Maps / Mapbox.<br />
+                  Aquí se mostrarían las propiedades geo-localizadas<br />
+                  y los filtros se aplicarían dinámicamente.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer (Simulado) */}
+      <footer className="bg-gray-800 text-white mt-12 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm">
+          <p>&copy; {new Date().getFullYear()} ZonaInmo. Todos los derechos reservados.</p>
+          <p className="mt-1">Términos y Condiciones | Política de Privacidad | Trabaja con nosotros</p>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default App;
